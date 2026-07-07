@@ -61,6 +61,12 @@ export default function App() {
   const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
   const [waitingForGroupApprove, setWaitingForGroupApprove] = useState<string | null>(null);
   const [roomMemberName, setRoomMemberName] = useState<string>("");
+  const [keepAlive5h, setKeepAlive5h] = useState<boolean>(() => localStorage.getItem("qr_p2p_keep_alive_5h") === "true");
+
+  useEffect(() => {
+    localStorage.setItem("qr_p2p_keep_alive_5h", keepAlive5h ? "true" : "false");
+  }, [keepAlive5h]);
+
   const [incomingRequest, setIncomingRequest] = useState<{
     id: string;
     name: string;
@@ -106,6 +112,10 @@ export default function App() {
     if (!session?.id) return;
 
     const handleUnload = () => {
+      // If 5-hour keep alive toggle is ON, do NOT remove data or log out!
+      const keepAlive = localStorage.getItem("qr_p2p_keep_alive_5h") === "true";
+      if (keepAlive) return;
+
       // Clear localStorage session to ensure complete logout on page refresh
       localStorage.removeItem("qr_p2p_session_id");
 
@@ -316,22 +326,26 @@ export default function App() {
       const myTypingRef = ref(db, `rooms/${roomId}/typing/${session.id}`);
       const roomNodeRef = ref(db, `rooms/${roomId}`);
 
-      onDisconnect(myMemberRef).remove();
-      onDisconnect(myTypingRef).remove();
+      // If 5-hour keep alive toggle is ON, cancel disconnect cleanup handlers so data is preserved
+      if (keepAlive5h) {
+        onDisconnect(myMemberRef).cancel();
+        onDisconnect(myTypingRef).cancel();
+        onDisconnect(roomNodeRef).cancel();
+      } else {
+        // Enforce immediate disconnect cleanup
+        onDisconnect(myMemberRef).remove();
+        onDisconnect(myTypingRef).remove();
+        // If ANY user disconnects (host or guest), delete the entire room node to automatically end session for everyone
+        onDisconnect(roomNodeRef).remove();
+      }
 
       // Sync my name in this room
       const myMemberName = membersMap[session.id]?.name || session.name;
       setRoomMemberName(myMemberName);
 
-      // If the current user is the host/creator, delete the entire room on disconnect to end session for all users
+      // If the current user is the host/creator, store it in ref for unload keepalive checks
       const isHost = roomData.creatorId === session.id || (!roomData.creatorId && Object.keys(membersMap)[0] === session.id);
       isHostRef.current = isHost;
-
-      if (isHost) {
-        onDisconnect(roomNodeRef).remove();
-      } else {
-        onDisconnect(roomNodeRef).cancel();
-      }
 
       // Set fallback peer for 1-to-1 visual backward compatibility
       if (peersList.length > 0) {
@@ -389,6 +403,33 @@ export default function App() {
     const savedSessionId = localStorage.getItem("qr_p2p_session_id");
 
     const initializeSession = async () => {
+      // --- Expired Session & Room cleanup ---
+      const cleanupExpiredData = async () => {
+        try {
+          const now = Date.now();
+          const roomsSnap = await get(ref(db, "rooms"));
+          if (roomsSnap.exists()) {
+            const rooms = roomsSnap.val();
+            Object.entries(rooms).forEach(([id, roomData]: [string, any]) => {
+              if (roomData.expiresAt && roomData.expiresAt < now) {
+                remove(ref(db, `rooms/${id}`));
+              }
+            });
+          }
+          const sessionsSnap = await get(ref(db, "sessions"));
+          if (sessionsSnap.exists()) {
+            const sessions = sessionsSnap.val();
+            Object.entries(sessions).forEach(([id, sessData]: [string, any]) => {
+              if (sessData.expiresAt && sessData.expiresAt < now) {
+                remove(ref(db, `sessions/${id}`));
+              }
+            });
+          }
+        } catch (err) {
+          console.error("Expired data cleanup failed:", err);
+        }
+      };
+
       let activeSession: Session | null = null;
 
       if (savedSessionId) {
@@ -404,19 +445,25 @@ export default function App() {
 
       if (!activeSession) {
         const newId = savedSessionId && /^[0-9a-f-]{36}$/i.test(savedSessionId) ? savedSessionId : generateUUID();
+        // Check keepAlive5h directly from localStorage for correctness during initialization
+        const isKeepAlive = localStorage.getItem("qr_p2p_keep_alive_5h") === "true";
         activeSession = {
           id: newId,
           avatarSeed: Math.random().toString(36).substring(7),
           name: generateRandomName(),
           connectedRoomId: null,
-          lastActive: Date.now()
-        };
+          lastActive: Date.now(),
+          expiresAt: isKeepAlive ? Date.now() + 5 * 60 * 60 * 1000 : undefined
+        } as any;
         try {
           await set(ref(db, `sessions/${newId}`), activeSession);
         } catch (e) {
           console.error("Error creating session:", e);
         }
       }
+
+      // Cleanup any expired database data
+      cleanupExpiredData();
 
       // Clean up session node on disconnect/refresh
       onDisconnect(ref(db, `sessions/${activeSession.id}`)).remove();
@@ -445,17 +492,19 @@ export default function App() {
     try {
       await set(ref(db, `rooms/${newRoomId}`), {
         id: newRoomId,
+        creatorId: session.id,
         createdTime: Date.now(),
+        expiresAt: keepAlive5h ? Date.now() + 5 * 60 * 60 * 1000 : undefined,
         members: {
           [session.id]: {
             id: session.id,
-            name: session.name,
+            name: "User 1",
             avatarSeed: session.avatarSeed,
             joinedAt: Date.now(),
             lastActive: Date.now()
           }
         }
-      });
+      } as any);
 
       await update(ref(db, `sessions/${session.id}`), {
         connectedRoomId: newRoomId
@@ -903,6 +952,30 @@ export default function App() {
                       Scan QR or enter 6-digit invite code
                     </p>
                   </div>
+                </button>
+              </div>
+
+              {/* 5-Hour Keep-Alive Toggle Switch */}
+              <div id="toggle-keep-alive-container" className={`flex items-center justify-between max-w-[320px] mx-auto p-4.5 rounded-[22px] border transition-all duration-300 select-none ${
+                keepAlive5h 
+                  ? "bg-cyan-500/10 border-cyan-500/30 shadow-[0_0_20px_rgba(6,182,212,0.06)]" 
+                  : "bg-white/5 border-white/5"
+              }`}>
+                <div className="text-left pr-4">
+                  <p className={`text-xs font-black tracking-tight ${keepAlive5h ? "text-cyan-400" : "text-slate-300"}`}>Data stored in 5hr</p>
+                  <p className="text-[10px] text-slate-500 font-semibold mt-0.5 leading-tight">No cleanup or logout on refresh</p>
+                </div>
+                <button
+                  id="btn-toggle-keep-alive"
+                  type="button"
+                  onClick={() => setKeepAlive5h(!keepAlive5h)}
+                  className={`w-9 h-5 rounded-full p-0.5 transition-all duration-300 cursor-pointer flex items-center shrink-0 ${
+                    keepAlive5h ? "bg-cyan-500" : "bg-slate-700"
+                  }`}
+                >
+                  <div className={`w-4 h-4 rounded-full bg-white shadow-md transition-all duration-300 ${
+                    keepAlive5h ? "transform translate-x-4" : ""
+                  }`} />
                 </button>
               </div>
             </div>
