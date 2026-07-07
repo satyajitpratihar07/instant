@@ -19,7 +19,8 @@ import {
   File,
   Sparkles,
   ChevronRight,
-  Menu
+  Menu,
+  Plus
 } from "lucide-react";
 import { Message, Peer, PendingFile } from "../types";
 import { formatBytes, getAvatarGradient, getInitials, MAX_FILE_SIZE_BYTES, playNotificationSound } from "../utils";
@@ -183,6 +184,7 @@ export default function ChatRoom({
   const [inputText, setInputText] = useState("");
   const [attachments, setAttachments] = useState<PendingFile[]>([]);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showPlusMenu, setShowPlusMenu] = useState(false);
   // Default sidebar closed on mobile (less than 768px wide)
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768);
   const [isUploading, setIsUploading] = useState(false);
@@ -664,26 +666,32 @@ export default function ChatRoom({
             isDarkMode ? "border-white/5 bg-[#0E0E12]/80" : "border-slate-200/60 bg-white/40"
           }`}
         >
-          {/* Emoji custom board overlay */}
+          {/* Emoji custom board overlay with backdrop click-outside */}
           {showEmojiPicker && (
-            <div
-              id="emoji-picker-popup"
-              className={`absolute bottom-full left-6 mb-3 p-3.5 rounded-2xl shadow-xl border grid grid-cols-8 gap-2 z-30 transition-all ${
-                isDarkMode ? "bg-[#16161A] border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.5)]" : "bg-white border-slate-200 shadow-slate-200/50"
-              }`}
-            >
-              {defaultEmojis.map((emoji) => (
-                <button
-                  id={`btn-emoji-${emoji}`}
-                  key={emoji}
-                  type="button"
-                  onClick={() => handleAddEmoji(emoji)}
-                  className="w-8 h-8 rounded-lg flex items-center justify-center text-lg hover:bg-cyan-500/10 cursor-pointer hover:scale-110 active:scale-95 transition-all"
-                >
-                  {emoji}
-                </button>
-              ))}
-            </div>
+            <>
+              <div className="fixed inset-0 z-20" onClick={() => setShowEmojiPicker(false)} />
+              <div
+                id="emoji-picker-popup"
+                className={`absolute bottom-full left-3 mb-3 p-3.5 rounded-2xl shadow-xl border grid grid-cols-8 gap-2 z-30 transition-all ${
+                  isDarkMode ? "bg-[#16161A] border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.5)]" : "bg-white border-slate-200 shadow-slate-200/50"
+                }`}
+              >
+                {defaultEmojis.map((emoji) => (
+                  <button
+                    id={`btn-emoji-${emoji}`}
+                    key={emoji}
+                    type="button"
+                    onClick={() => {
+                      handleAddEmoji(emoji);
+                      // Don't auto-close so they can type multiple emojis
+                    }}
+                    className="w-8 h-8 rounded-lg flex items-center justify-center text-lg hover:bg-cyan-500/10 cursor-pointer hover:scale-110 active:scale-95 transition-all"
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            </>
           )}
 
           <form id="chat-input-form" onSubmit={handleSendMessage} className="flex items-center gap-2 md:gap-3">
@@ -696,34 +704,74 @@ export default function ChatRoom({
               multiple
               className="hidden"
             />
-            <button
-              id="btn-attach"
-              type="button"
-              onClick={triggerFileSelect}
-              className={`p-2 md:p-2.5 rounded-xl border cursor-pointer transition-all ${
-                isDarkMode
-                  ? "border-white/10 hover:border-cyan-500/30 hover:text-cyan-400 bg-white/5 text-slate-300"
-                  : "border-slate-200 hover:border-indigo-600 hover:text-indigo-600 bg-slate-50 text-slate-600"
-              }`}
-              title="Attach File (Images, PDF, ZIP, etc)"
-            >
-              <Paperclip className="w-4 h-4 md:w-5 md:h-5" />
-            </button>
+            
+            {/* Plus Menu Toggle Button */}
+            <div className="relative">
+              <button
+                id="btn-plus-menu"
+                type="button"
+                onClick={() => setShowPlusMenu((prev) => !prev)}
+                className={`p-2.5 rounded-xl border cursor-pointer transition-all flex items-center justify-center ${
+                  showPlusMenu
+                    ? "border-cyan-500 text-cyan-400 bg-cyan-500/10"
+                    : isDarkMode
+                    ? "border-white/10 hover:border-cyan-500/30 hover:text-cyan-400 bg-white/5 text-slate-300"
+                    : "border-slate-200 hover:border-indigo-600 hover:text-indigo-600 bg-slate-50 text-slate-600"
+                }`}
+                title="More options"
+              >
+                <Plus className={`w-4 h-4 md:w-5 md:h-5 transition-transform duration-200 ${showPlusMenu ? "rotate-45" : ""}`} />
+              </button>
 
-            {/* Emoji Trigger - Hidden on mobile as native emoji keyboards exist */}
-            <button
-              id="btn-emoji-toggle"
-              type="button"
-              onClick={() => setShowEmojiPicker((prev) => !prev)}
-              className={`hidden md:block p-2.5 rounded-xl border cursor-pointer transition-all ${
-                isDarkMode
-                  ? "border-white/10 hover:border-cyan-500/30 hover:text-cyan-400 bg-white/5 text-slate-300"
-                  : "border-slate-200 hover:border-indigo-600 hover:text-indigo-600 bg-slate-50 text-slate-600"
-              }`}
-              title="Pick Emoji"
-            >
-              <Smile className="w-5 h-5" />
-            </button>
+              {/* Plus options dropdown menu */}
+              {showPlusMenu && (
+                <>
+                  <div className="fixed inset-0 z-20" onClick={() => setShowPlusMenu(false)} />
+                  <div
+                    id="plus-menu-dropdown"
+                    className={`absolute bottom-full left-0 mb-3 p-1.5 rounded-2xl shadow-xl border w-40 z-30 transition-all ${
+                      isDarkMode
+                        ? "bg-[#16161A] border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.5)]"
+                        : "bg-white border-slate-200 shadow-slate-200/50"
+                    }`}
+                  >
+                    <button
+                      id="btn-attach"
+                      type="button"
+                      onClick={() => {
+                        setShowPlusMenu(false);
+                        triggerFileSelect();
+                      }}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-all text-left ${
+                        isDarkMode
+                          ? "hover:bg-white/5 text-slate-200 hover:text-cyan-400"
+                          : "hover:bg-slate-100 text-slate-700 hover:text-indigo-600"
+                      }`}
+                    >
+                      <Paperclip className="w-4 h-4 text-cyan-400" />
+                      <span>Attach File</span>
+                    </button>
+                    
+                    <button
+                      id="btn-emoji-toggle"
+                      type="button"
+                      onClick={() => {
+                        setShowPlusMenu(false);
+                        setShowEmojiPicker(true);
+                      }}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-all text-left ${
+                        isDarkMode
+                          ? "hover:bg-white/5 text-slate-200 hover:text-cyan-400"
+                          : "hover:bg-slate-100 text-slate-700 hover:text-indigo-600"
+                      }`}
+                    >
+                      <Smile className="w-4 h-4 text-amber-400" />
+                      <span>Insert Emoji</span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
 
             {/* Main input textbox */}
             <input
