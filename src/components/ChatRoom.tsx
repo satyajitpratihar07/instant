@@ -22,15 +22,14 @@ import {
   Menu,
   Plus,
   UserPlus,
-  ScanLine
+  ScanLine,
+  Loader2
 } from "lucide-react";
 import { Message, Peer, PendingFile } from "../types";
 import { formatBytes, getAvatarGradient, getInitials, MAX_FILE_SIZE_BYTES, playNotificationSound } from "../utils";
 import Lightbox from "./Lightbox";
-import QrGenerator from "./QrGenerator";
-import QrScanner from "./QrScanner";
 import { db } from "../firebase";
-import { ref as dbRef, set, get } from "firebase/database";
+import { ref as dbRef, set, get, remove } from "firebase/database";
 import { AlertCircle } from "lucide-react";
 
 // Determine appropriate icon for attachments
@@ -193,6 +192,77 @@ export default function ChatRoom({
   const [showPlusMenu, setShowPlusMenu] = useState(false);
   const [showAddMember, setShowAddMember] = useState(false);
   const [showJoinChat, setShowJoinChat] = useState(false);
+  
+  const [inviteCode, setInviteCode] = useState<string | null>(null);
+  const [copiedCode, setCopiedCode] = useState(false);
+  const [joinCodeInput, setJoinCodeInput] = useState("");
+  const [joinError, setJoinError] = useState<string | null>(null);
+  const [joining, setJoining] = useState(false);
+
+  // Manage invite code lifecycle inside the ChatRoom component
+  useEffect(() => {
+    if (!showAddMember || !sessionId) {
+      setInviteCode(null);
+      return;
+    }
+
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    setInviteCode(code);
+
+    const registerCode = async () => {
+      try {
+        await set(dbRef(db, `codes/${code}`), {
+          sessionId,
+          createdAt: Date.now(),
+        });
+      } catch (err) {
+        console.error("Error registering code:", err);
+      }
+    };
+    registerCode();
+
+    return () => {
+      remove(dbRef(db, `codes/${code}`)).catch((err) => {
+        console.error("Error removing code registration:", err);
+      });
+    };
+  }, [showAddMember, sessionId]);
+
+  const handleCopyCode = () => {
+    if (!inviteCode) return;
+    navigator.clipboard.writeText(inviteCode);
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 2000);
+  };
+
+  const handleJoinWithCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const sanitized = joinCodeInput.replace(/[-\s]/g, "");
+    if (!/^\d{6}$/.test(sanitized)) {
+      setJoinError("Please enter a valid 6-digit number.");
+      return;
+    }
+
+    setJoinError(null);
+    setJoining(true);
+
+    try {
+      const snap = await get(dbRef(db, `codes/${sanitized}`));
+      if (snap.exists()) {
+        const val = snap.val();
+        setShowJoinChat(false);
+        setJoinCodeInput("");
+        onScanSuccess?.(val.sessionId);
+      } else {
+        setJoinError("Invalid or expired invite code.");
+      }
+    } catch (err) {
+      console.error("Error joining with code:", err);
+      setJoinError("Failed to verify code. Check connection.");
+    } finally {
+      setJoining(false);
+    }
+  };
   // Default sidebar closed on mobile (less than 768px wide)
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768);
   const [isUploading, setIsUploading] = useState(false);
@@ -937,45 +1007,144 @@ export default function ChatRoom({
         />
       )}
 
-      {/* Add Member Modal */}
+      {/* Add Member Modal (Simple 6-Digit Code) */}
       {showAddMember && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="relative w-full max-w-lg animate-scale-up">
-            <button
-              onClick={() => setShowAddMember(false)}
-              className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white z-10 cursor-pointer"
+          <div className="relative w-full max-w-sm animate-scale-up">
+            <div
+              className={`relative w-full rounded-3xl p-6 transition-all duration-300 shadow-2xl border ${
+                isDarkMode
+                  ? "bg-sleek-card border-white/5 shadow-cyan-500/5 text-white"
+                  : "bg-white border-slate-200 shadow-slate-200/50 text-slate-800"
+              }`}
             >
-              <X className="w-5 h-5" />
-            </button>
-            <QrGenerator
-              sessionId={sessionId}
-              sessionName={sessionName}
-              avatarSeed={avatarSeed}
-              onRefresh={() => {}}
-              isDarkMode={isDarkMode}
-            />
+              <button
+                onClick={() => setShowAddMember(false)}
+                className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="text-center mb-6">
+                <h3 className="text-lg font-black tracking-tight">Add Member</h3>
+                <p className={`text-xs ${isDarkMode ? "text-slate-400" : "text-slate-500"} mt-1`}>
+                  Share this temporary 6-digit code with the member you want to invite.
+                </p>
+              </div>
+
+              {inviteCode ? (
+                <div
+                  onClick={handleCopyCode}
+                  className={`p-6 rounded-2xl border text-center cursor-pointer transition-all hover:scale-[1.01] active:scale-[0.99] relative overflow-hidden select-none ${
+                    copiedCode
+                      ? "border-emerald-500 bg-emerald-500/10"
+                      : isDarkMode
+                      ? "bg-white/5 border-cyan-500/20 hover:border-cyan-500/40"
+                      : "bg-slate-50 border-slate-200 hover:border-slate-300"
+                  }`}
+                  title="Click to copy invite code"
+                >
+                  <p className={`text-[10px] uppercase font-bold tracking-wider ${copiedCode ? "text-emerald-400" : isDarkMode ? "text-cyan-400" : "text-indigo-600"} mb-1`}>
+                    {copiedCode ? "Copied Code!" : "Invite Code"}
+                  </p>
+                  <h4 className={`text-3xl font-black tracking-widest font-mono ${copiedCode ? "text-emerald-400" : isDarkMode ? "text-white" : "text-slate-800"}`}>
+                    {inviteCode.substring(0, 3)} {inviteCode.substring(3, 6)}
+                  </h4>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center p-8">
+                  <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
+                </div>
+              )}
+
+              <button
+                onClick={handleCopyCode}
+                disabled={!inviteCode}
+                className={`mt-6 w-full py-3 px-4 rounded-xl font-bold transition-all duration-200 cursor-pointer text-xs uppercase tracking-wider ${
+                  copiedCode
+                    ? "bg-emerald-500 text-white"
+                    : isDarkMode
+                    ? "bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white shadow-lg shadow-cyan-500/15"
+                    : "bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/15"
+                }`}
+              >
+                {copiedCode ? "Copied!" : "Copy Code"}
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Join Chat Modal */}
+      {/* Join Chat Modal (Simple Code Entry) */}
       {showJoinChat && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="relative w-full max-w-md animate-scale-up">
-            <button
-              onClick={() => setShowJoinChat(false)}
-              className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white z-10 cursor-pointer"
+          <div className="relative w-full max-w-sm animate-scale-up">
+            <div
+              className={`relative w-full rounded-3xl p-6 transition-all duration-300 shadow-2xl border ${
+                isDarkMode
+                  ? "bg-sleek-card border-white/5 shadow-cyan-500/5 text-white"
+                  : "bg-white border-slate-200 shadow-slate-200/50 text-slate-800"
+              }`}
             >
-              <X className="w-5 h-5" />
-            </button>
-            <QrScanner
-              onScanSuccess={(targetId) => {
-                setShowJoinChat(false);
-                onScanSuccess?.(targetId);
-              }}
-              onCancel={() => setShowJoinChat(false)}
-              isDarkMode={isDarkMode}
-            />
+              <button
+                onClick={() => setShowJoinChat(false)}
+                className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="text-center mb-6">
+                <h3 className="text-lg font-black tracking-tight">Join Chat</h3>
+                <p className={`text-xs ${isDarkMode ? "text-slate-400" : "text-slate-500"} mt-1`}>
+                  Enter the 6-digit invite code to connect instantly.
+                </p>
+              </div>
+
+              {joinError && (
+                <div className="mb-4 p-2.5 rounded-xl border border-rose-500/20 bg-rose-500/5 text-rose-400 text-xs flex items-center gap-1.5 justify-center">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{joinError}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleJoinWithCode} className="space-y-4">
+                <input
+                  type="text"
+                  maxLength={7}
+                  placeholder="000 000"
+                  value={joinCodeInput}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/[^0-9\s-]/g, "");
+                    setJoinCodeInput(val);
+                  }}
+                  disabled={joining}
+                  className={`w-full py-3 px-4 rounded-xl text-center text-xl font-bold font-mono tracking-widest outline-none border transition-all ${
+                    isDarkMode
+                      ? "bg-slate-950/80 border-white/10 text-slate-100 placeholder-slate-800 focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/30"
+                      : "bg-slate-50 border-slate-200 text-slate-800 placeholder-slate-400 focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600"
+                  }`}
+                />
+
+                <button
+                  type="submit"
+                  disabled={joining || !joinCodeInput.trim()}
+                  className={`w-full py-3 px-4 rounded-xl font-bold transition-all duration-200 cursor-pointer text-xs uppercase tracking-wider flex items-center justify-center gap-2 ${
+                    isDarkMode
+                      ? "bg-gradient-to-tr from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white shadow-lg shadow-cyan-500/15"
+                      : "bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/15"
+                  }`}
+                >
+                  {joining ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Connecting...
+                    </>
+                  ) : (
+                    "Join Chat"
+                  )}
+                </button>
+              </form>
+            </div>
           </div>
         </div>
       )}
