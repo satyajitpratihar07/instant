@@ -16,15 +16,31 @@ import {
   AlertCircle
 } from "lucide-react";
 import { Message, Peer, Session } from "./types";
-import { playNotificationSound, getAvatarGradient, getInitials, getApiUrl, getWsUrl } from "./utils";
+import { playNotificationSound, getAvatarGradient, getInitials } from "./utils";
 import QrGenerator from "./components/QrGenerator";
 import QrScanner from "./components/QrScanner";
 import ChatRoom from "./components/ChatRoom";
+import { db } from "./firebase";
+import { ref, set, get, update, remove, onValue, push } from "firebase/database";
 
 interface Toast {
   id: string;
   message: string;
   type: "success" | "error" | "info";
+}
+
+function generateUUID(): string {
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+function generateRandomName(): string {
+  const adjectives = ["Secure", "Crypto", "Swift", "Silent", "Shadow", "Alpha", "Zenith", "Quantum", "Cipher", "Vortex"];
+  const nouns = ["Peer", "Node", "Link", "Ghost", "Falcon", "Nova", "Pulse", "Beacon", "Matrix", "Cipher"];
+  return adjectives[Math.floor(Math.random() * adjectives.length)] + " " + nouns[Math.floor(Math.random() * nouns.length)];
 }
 
 export default function App() {
@@ -50,8 +66,6 @@ export default function App() {
   const [waitingForResponse, setWaitingForResponse] = useState<string | null>(null); // name of peer we requested
 
   // --- Connection Refs ---
-  const wsRef = useRef<WebSocket | null>(null);
-  const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const autoConnectRef = useRef<string | null>(null);
 
   // --- Custom Toast Dispatcher ---
@@ -62,6 +76,159 @@ export default function App() {
       setToasts((prev) => prev.filter((t) => t.id !== id));
     }, 4500);
   };
+
+  // --- Heartbeat & Status Updater ---
+  useEffect(() => {
+    if (!session?.id) return;
+
+    const interval = setInterval(() => {
+      update(ref(db, `sessions/${session.id}`), {
+        lastActive: Date.now()
+      });
+    }, 10000);
+
+    update(ref(db, `sessions/${session.id}`), {
+      lastActive: Date.now()
+    });
+
+    return () => clearInterval(interval);
+  }, [session?.id]);
+
+  // --- Real-time Session listener (incoming requests & pairing status) ---
+  useEffect(() => {
+    if (!session?.id) return;
+
+    const mySessionRef = ref(db, `sessions/${session.id}`);
+    const unsubscribeMySession = onValue(mySessionRef, (snapshot) => {
+      if (!snapshot.exists()) return;
+      const data = snapshot.val();
+
+      // Handle connectedRoomId changes
+      if (data.connectedRoomId && data.connectedRoomId !== session.connectedRoomId) {
+        setSession((prev) => prev ? { ...prev, connectedRoomId: data.connectedRoomId } : null);
+        setView("chat");
+      }
+
+      // Handle incoming connection requests
+      if (data.incomingRequests) {
+        const requests = Object.values(data.incomingRequests);
+        if (requests.length > 0) {
+          const req: any = requests[0];
+          playNotificationSound("request");
+          setIncomingRequest(req);
+        }
+      } else {
+        setIncomingRequest(null);
+      }
+
+      // Handle pairingStatus changes
+      if (data.pairingStatus) {
+        const { type, roomId, peerName } = data.pairingStatus;
+        if (type === "declined") {
+          setWaitingForResponse(null);
+          setIsConnecting(false);
+          addToast(`${peerName || "Peer"} declined your chat invitation.`, "error");
+          update(mySessionRef, { pairingStatus: null });
+        } else if (type === "accepted") {
+          playNotificationSound("success");
+          setWaitingForResponse(null);
+          setIsConnecting(false);
+          setIncomingRequest(null);
+          update(mySessionRef, { pairingStatus: null });
+        }
+      }
+    });
+
+    return () => unsubscribeMySession();
+  }, [session?.id, session?.connectedRoomId]);
+
+  // --- Real-time Chat Room & Peer sync listener ---
+  useEffect(() => {
+    if (!session?.connectedRoomId || !session?.id) {
+      setPeer(null);
+      setPeerOnline(false);
+      setPeerTyping(false);
+      setMessages([]);
+      return;
+    }
+
+    const roomId = session.connectedRoomId;
+    const roomRef = ref(db, `rooms/${roomId}`);
+    
+    let peerUnsubscribe: (() => void) | null = null;
+
+    const roomUnsubscribe = onValue(roomRef, (snapshot) => {
+      if (!snapshot.exists()) {
+        // Room was closed/deleted
+        setPeer(null);
+        setPeerOnline(false);
+        setPeerTyping(false);
+        setMessages([]);
+        setSession((prev) => prev ? { ...prev, connectedRoomId: null } : null);
+        setView("home");
+        addToast("Active room was closed or peer left.", "info");
+        return;
+      }
+
+      const roomData = snapshot.val();
+      const peerId = roomData.peerA === session.id ? roomData.peerB : roomData.peerA;
+      
+      // Sync messages
+      if (roomData.messages) {
+        const msgList: Message[] = Object.entries(roomData.messages).map(([id, val]: [string, any]) => ({
+          id,
+          senderId: val.senderId,
+          senderName: val.senderId === session.id ? session.name : (peer?.name || "Peer"),
+          text: val.text,
+          timestamp: val.timestamp,
+          file: val.file || undefined
+        })).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+        
+        // Play sound for incoming message
+        setMessages((prev) => {
+          if (msgList.length > prev.length) {
+            const lastMsg = msgList[msgList.length - 1];
+            if (lastMsg && lastMsg.senderId !== session.id) {
+              playNotificationSound("message");
+            }
+          }
+          return msgList;
+        });
+      } else {
+        setMessages([]);
+      }
+
+      // Sync typing
+      if (roomData.typing && peerId) {
+        setPeerTyping(!!roomData.typing[peerId]);
+      } else {
+        setPeerTyping(false);
+      }
+
+      // Sync peer profile and heartbeat online check
+      if (peerId && !peerUnsubscribe) {
+        const peerRef = ref(db, `sessions/${peerId}`);
+        peerUnsubscribe = onValue(peerRef, (peerSnapshot) => {
+          if (peerSnapshot.exists()) {
+            const peerData = peerSnapshot.val();
+            const isOnline = Date.now() - (peerData.lastActive || 0) < 25000;
+            setPeer({
+              id: peerId,
+              name: peerData.name,
+              avatarSeed: peerData.avatarSeed,
+              online: isOnline
+            });
+            setPeerOnline(isOnline);
+          }
+        });
+      }
+    });
+
+    return () => {
+      roomUnsubscribe();
+      if (peerUnsubscribe) peerUnsubscribe();
+    };
+  }, [session?.connectedRoomId, session?.id, peer?.name]);
 
   // --- Handshake & Register Session ---
   useEffect(() => {
@@ -76,292 +243,223 @@ export default function App() {
     const scanTargetId = urlParams.get("scan");
     if (scanTargetId) {
       autoConnectRef.current = scanTargetId;
-      // Clean query string out of browser address bar so it doesn't loop
       window.history.replaceState({}, document.title, window.location.pathname);
     }
 
-    // 3. Handshake session registration with server
+    // 3. Register or restore session
     const savedSessionId = localStorage.getItem("qr_p2p_session_id");
-    fetch(getApiUrl("/api/session/register"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId: savedSessionId }),
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success) {
-          setSession(data.session);
-          localStorage.setItem("qr_p2p_session_id", data.session.id);
-          console.log("Session handshake successful:", data.session);
+    
+    const initializeSession = async () => {
+      let activeSession: Session | null = null;
 
-          if (data.session.connectedRoomId) {
-            setView("chat");
-            addToast("Reconnecting to active session...", "info");
+      if (savedSessionId) {
+        try {
+          const snap = await get(ref(db, `sessions/${savedSessionId}`));
+          if (snap.exists()) {
+            activeSession = snap.val() as Session;
           }
-        } else {
-          addToast("Failed to initialize secure session", "error");
+        } catch (e) {
+          console.error("Error fetching session:", e);
         }
-      })
-      .catch((err) => {
-        console.error("Session handshaking failed:", err);
-        addToast("Server connection failure", "error");
-      });
+      }
+
+      if (!activeSession) {
+        const newId = savedSessionId && /^[0-9a-f-]{36}$/i.test(savedSessionId) ? savedSessionId : generateUUID();
+        activeSession = {
+          id: newId,
+          avatarSeed: Math.random().toString(36).substring(7),
+          name: generateRandomName(),
+          connectedRoomId: null,
+          lastActive: Date.now()
+        };
+        try {
+          await set(ref(db, `sessions/${newId}`), activeSession);
+        } catch (e) {
+          console.error("Error creating session:", e);
+        }
+      }
+
+      setSession(activeSession);
+      localStorage.setItem("qr_p2p_session_id", activeSession.id);
+      
+      // Auto connect if parameter exists
+      if (autoConnectRef.current) {
+        const target = autoConnectRef.current;
+        autoConnectRef.current = null;
+        setTimeout(() => {
+          requestConnection(target, activeSession!);
+        }, 800);
+      }
+    };
+
+    initializeSession();
   }, []);
 
-  // --- WebSocket Connection lifecycle manager ---
-  useEffect(() => {
-    if (!session) return;
-
-    // Disconnect existing socket if any
-    if (wsRef.current) {
-      wsRef.current.close();
-    }
-
-    const wsUrl = getWsUrl();
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
-
-    ws.onopen = () => {
-      console.log("WebSocket connection established. Handshaking...");
-      // Register WS connection for current session
-      ws.send(JSON.stringify({ type: "register-ws", sessionId: session.id }));
-
-      // Setup 15-sec heartbeat keep alive interval
-      if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
-      pingIntervalRef.current = setInterval(() => {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: "ping" }));
-        }
-      }, 15000);
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const payload = JSON.parse(event.data);
-        const { type } = payload;
-
-        if (type === "ws-registered") {
-          console.log("WS registered securely. Socket is live.");
-          
-          // Trigger automatic pairing if scanned link parameter existed
-          if (autoConnectRef.current) {
-            const targetId = autoConnectRef.current;
-            autoConnectRef.current = null;
-            requestConnection(targetId);
-          }
-        }
-
-        if (type === "incoming-request") {
-          playNotificationSound("request");
-          setIncomingRequest(payload.sender);
-        }
-
-        if (type === "request-sent") {
-          setIsConnecting(false);
-          addToast("Pairing request delivered successfully!", "success");
-        }
-
-        if (type === "connection-declined") {
-          setWaitingForResponse(null);
-          setIsConnecting(false);
-          addToast(`${payload.responderName} declined your chat invitation.`, "error");
-        }
-
-        if (type === "connection-established") {
-          playNotificationSound("success");
-          setWaitingForResponse(null);
-          setIsConnecting(false);
-          setIncomingRequest(null);
-          
-          setPeer(payload.peer);
-          setPeerOnline(payload.peer.online);
-          setMessages([]);
-          setView("chat");
-
-          // Update local session state
-          setSession((prev) => prev ? { ...prev, connectedRoomId: payload.roomId } : null);
-          addToast(`Linked with ${payload.peer.name}!`, "success");
-        }
-
-        if (type === "room-sync") {
-          setPeer(payload.peer);
-          setPeerOnline(payload.peer.online);
-          setMessages(payload.messages);
-          setView("chat");
-          addToast(`Re-synchronized active chat room!`, "success");
-        }
-
-        if (type === "peer-status-change") {
-          setPeerOnline(payload.online);
-          addToast(payload.online ? "Peer came back online" : "Peer went offline", payload.online ? "success" : "info");
-        }
-
-        if (type === "peer-typing") {
-          setPeerTyping(payload.isTyping);
-        }
-
-        if (type === "message-received") {
-          const { message } = payload;
-          setMessages((prev) => {
-            // Guard against duplicate sync payloads
-            if (prev.some((m) => m.id === message.id)) return prev;
-            return [...prev, message];
-          });
-          if (message.senderId !== session.id) {
-            playNotificationSound("message");
-          }
-        }
-
-        if (type === "message-deleted") {
-          setMessages((prev) => prev.filter((m) => m.id !== payload.messageId));
-        }
-
-        if (type === "peer-disconnected") {
-          playNotificationSound("request");
-          setPeer(null);
-          setPeerOnline(false);
-          setPeerTyping(false);
-          setMessages([]);
-          setSession((prev) => prev ? { ...prev, connectedRoomId: null } : null);
-          setView("home");
-
-          if (payload.reason === "left") {
-            addToast("The peer has disconnected and closed the session.", "info");
-          } else if (payload.reason === "you-left") {
-            addToast("You left the chat room. Session closed.", "info");
-          } else {
-            addToast("Peer connection lost.", "error");
-          }
-        }
-
-        if (type === "error") {
-          setIsConnecting(false);
-          addToast(payload.message, "error");
-        }
-      } catch (err) {
-        console.error("Error decoding websocket push:", err);
-      }
-    };
-
-    ws.onclose = () => {
-      console.log("WebSocket closed. Attempting reconnect in 4s...");
-      if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
-    };
-
-    // Global custom event hook to let children dispatch over socket easily
-    const handleWSSend = (e: Event) => {
-      const customEvent = e as CustomEvent;
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify(customEvent.detail));
-      } else {
-        addToast("Websocket is reconnecting. Try again.", "error");
-      }
-    };
-
-    window.addEventListener("ws-send", handleWSSend);
-
-    return () => {
-      window.removeEventListener("ws-send", handleWSSend);
-      if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
-    };
-  }, [session?.id]);
-
   // --- Dispatch Connection Request ---
-  const requestConnection = (targetId: string) => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      addToast("Connection to server is sleeping. Try again in a moment.", "error");
-      return;
-    }
+  const requestConnection = async (targetId: string, currentSession = session) => {
+    const activeSess = currentSession || session;
+    if (!activeSess) return;
 
-    if (targetId === session?.id) {
+    if (targetId === activeSess.id) {
       addToast("You cannot pair with your own session QR code.", "error");
       return;
     }
 
     setIsConnecting(true);
     setWaitingForResponse("Peer");
-    wsRef.current.send(
-      JSON.stringify({
-        type: "request-connection",
-        targetSessionId: targetId,
-      })
-    );
+
+    try {
+      await set(ref(db, `sessions/${targetId}/incomingRequests/${activeSess.id}`), {
+        id: activeSess.id,
+        name: activeSess.name,
+        avatarSeed: activeSess.avatarSeed
+      });
+      await update(ref(db, `sessions/${activeSess.id}`), {
+        pairingStatus: { type: "pending", targetId }
+      });
+      addToast("Pairing request delivered successfully!", "success");
+    } catch (e) {
+      console.error("Pairing request failed:", e);
+      setIsConnecting(false);
+      setWaitingForResponse(null);
+      addToast("Failed to send pairing request.", "error");
+    }
   };
 
   // --- Respond to Incoming Connection ---
-  const respondConnection = (accept: boolean) => {
-    if (!incomingRequest || !wsRef.current) return;
+  const respondConnection = async (accept: boolean) => {
+    if (!incomingRequest || !session) return;
+    const senderId = incomingRequest.id;
 
-    wsRef.current.send(
-      JSON.stringify({
-        type: "respond-connection",
-        targetSessionId: incomingRequest.id,
-        accept,
-      })
-    );
+    try {
+      await remove(ref(db, `sessions/${session.id}/incomingRequests/${senderId}`));
 
-    if (!accept) {
-      addToast("Pairing invitation declined.", "info");
+      if (!accept) {
+        await update(ref(db, `sessions/${senderId}`), {
+          pairingStatus: { type: "declined", peerName: session.name }
+        });
+        addToast("Pairing invitation declined.", "info");
+      } else {
+        const newRoomId = generateUUID();
+        
+        await set(ref(db, `rooms/${newRoomId}`), {
+          id: newRoomId,
+          peerA: session.id,
+          peerB: senderId,
+          createdTime: Date.now()
+        });
+
+        await update(ref(db, `sessions/${senderId}`), {
+          connectedRoomId: newRoomId,
+          pairingStatus: { type: "accepted", roomId: newRoomId }
+        });
+
+        await update(ref(db, `sessions/${session.id}`), {
+          connectedRoomId: newRoomId
+        });
+      }
+    } catch (e) {
+      console.error("Responding to connection failed:", e);
+      addToast("Failed to respond to request.", "error");
     }
     setIncomingRequest(null);
   };
 
   // --- Disconnect Active Chat Room ---
-  const leaveRoom = () => {
-    if (!session?.connectedRoomId || !wsRef.current) return;
+  const leaveRoom = async () => {
+    if (!session?.connectedRoomId) return;
+    const roomId = session.connectedRoomId;
+    
+    try {
+      const roomSnap = await get(ref(db, `rooms/${roomId}`));
+      if (roomSnap.exists()) {
+        const roomData = roomSnap.val();
+        const peerId = roomData.peerA === session.id ? roomData.peerB : roomData.peerA;
+        if (peerId) {
+          await update(ref(db, `sessions/${peerId}`), { connectedRoomId: null });
+        }
+      }
 
-    wsRef.current.send(
-      JSON.stringify({
-        type: "leave-room",
-        roomId: session.connectedRoomId,
-      })
-    );
+      await remove(ref(db, `rooms/${roomId}`));
+      await update(ref(db, `sessions/${session.id}`), { connectedRoomId: null });
+      
+      setView("home");
+      addToast("You left the chat room. Session closed.", "info");
+    } catch (e) {
+      console.error("Failed to leave room:", e);
+      setSession((prev) => prev ? { ...prev, connectedRoomId: null } : null);
+      setView("home");
+    }
   };
 
   // --- Send Message Hook ---
-  const sendMessage = (text: string, fileId?: string, fileMeta?: any) => {
-    if (!session?.connectedRoomId || !wsRef.current) return;
+  const sendMessage = async (text: string, fileId?: string, fileMeta?: any) => {
+    if (!session?.connectedRoomId) return;
+    const roomId = session.connectedRoomId;
 
-    wsRef.current.send(
-      JSON.stringify({
-        type: "chat-message",
-        roomId: session.connectedRoomId,
+    try {
+      const messagesRef = ref(db, `rooms/${roomId}/messages`);
+      const newMsgRef = push(messagesRef);
+      await set(newMsgRef, {
+        id: newMsgRef.key,
+        senderId: session.id,
         text,
-        file: fileId ? { id: fileId, ...fileMeta } : undefined,
-      })
-    );
+        timestamp: Date.now(),
+        file: fileId ? { id: fileId, ...fileMeta } : null
+      });
+    } catch (e) {
+      console.error("Failed to send message:", e);
+      addToast("Failed to send message", "error");
+    }
   };
 
   // --- Synced Message Deletion Hook ---
-  const deleteMessage = (messageId: string) => {
-    if (!session?.connectedRoomId || !wsRef.current) return;
+  const deleteMessage = async (messageId: string) => {
+    if (!session?.connectedRoomId) return;
+    const roomId = session.connectedRoomId;
 
-    wsRef.current.send(
-      JSON.stringify({
-        type: "delete-message",
-        roomId: session.connectedRoomId,
-        messageId,
-      })
-    );
+    try {
+      await remove(ref(db, `rooms/${roomId}/messages/${messageId}`));
+    } catch (e) {
+      console.error("Failed to delete message:", e);
+      addToast("Failed to delete message", "error");
+    }
+  };
+
+  // --- Update typing indicator state ---
+  const handleSetTyping = async (isTyping: boolean) => {
+    if (!session?.connectedRoomId) return;
+    try {
+      await set(ref(db, `rooms/${session.connectedRoomId}/typing/${session.id}`), isTyping);
+    } catch (e) {
+      console.error("Failed to update typing status:", e);
+    }
   };
 
   // --- Refresh QR / Reset Profile ---
-  const handleRefreshSession = () => {
+  const handleRefreshSession = async () => {
+    if (session?.connectedRoomId) {
+      await leaveRoom();
+    }
+    
     localStorage.removeItem("qr_p2p_session_id");
-    fetch(getApiUrl("/api/session/register"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId: null }),
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success) {
-          setSession(data.session);
-          localStorage.setItem("qr_p2p_session_id", data.session.id);
-          addToast("Secure session refreshed successfully!", "success");
-        }
-      })
-      .catch((err) => console.error("Error refreshing profile:", err));
+    const newId = generateUUID();
+    const newSession = {
+      id: newId,
+      avatarSeed: Math.random().toString(36).substring(7),
+      name: generateRandomName(),
+      connectedRoomId: null,
+      lastActive: Date.now()
+    };
+
+    try {
+      await set(ref(db, `sessions/${newId}`), newSession);
+      setSession(newSession);
+      localStorage.setItem("qr_p2p_session_id", newId);
+      addToast("Secure session refreshed successfully!", "success");
+    } catch (e) {
+      console.error("Failed to refresh session:", e);
+    }
   };
 
   // --- Toggle Light/Dark Mode ---
@@ -549,6 +647,7 @@ export default function App() {
                 peerTyping={peerTyping}
                 onSendMessage={sendMessage}
                 onDeleteMessage={deleteMessage}
+                onSetTyping={handleSetTyping}
                 onLeaveRoom={leaveRoom}
                 isDarkMode={isDarkMode}
               />

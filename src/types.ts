@@ -3,6 +3,7 @@ export interface Session {
   avatarSeed: string;
   name: string;
   connectedRoomId: string | null;
+  lastActive?: number;
 }
 
 export interface Peer {

@@ -22,8 +22,132 @@ import {
   Menu
 } from "lucide-react";
 import { Message, Peer, PendingFile } from "../types";
-import { formatBytes, getAvatarGradient, getInitials, MAX_FILE_SIZE_BYTES, playNotificationSound, getApiUrl } from "../utils";
+import { formatBytes, getAvatarGradient, getInitials, MAX_FILE_SIZE_BYTES, playNotificationSound } from "../utils";
 import Lightbox from "./Lightbox";
+import { db } from "../firebase";
+import { ref as dbRef, set, get } from "firebase/database";
+import { AlertCircle } from "lucide-react";
+
+// Determine appropriate icon for attachments
+const getFileIcon = (mimeType: string) => {
+  if (mimeType.startsWith("image/")) return <Image className="w-5 h-5 text-indigo-400" />;
+  if (mimeType.startsWith("audio/")) return <Volume2 className="w-5 h-5 text-cyan-400" />;
+  if (mimeType.startsWith("video/")) return <Video className="w-5 h-5 text-amber-400" />;
+  if (mimeType.includes("pdf") || mimeType.includes("word") || mimeType.includes("document")) {
+    return <FileText className="w-5 h-5 text-emerald-400" />;
+  }
+  return <File className="w-5 h-5 text-slate-400" />;
+};
+
+interface FileAttachmentViewProps {
+  file: {
+    id: string;
+    name: string;
+    type: string;
+    size: number;
+  };
+  isMe: boolean;
+  onSetLightbox: (url: string, name: string) => void;
+}
+
+function FileAttachmentView({ file, isMe, onSetLightbox }: FileAttachmentViewProps) {
+  const [fileData, setFileData] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    const fetchFile = async () => {
+      try {
+        const snap = await get(dbRef(db, `files/${file.id}`));
+        if (snap.exists() && active) {
+          const val = snap.val();
+          setFileData(val.data);
+        } else if (active) {
+          setError("File not found");
+        }
+      } catch (e) {
+        console.error("Error reading file:", e);
+        if (active) setError("Load error");
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    fetchFile();
+    return () => { active = false; };
+  }, [file.id]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-4 border border-white/5 bg-[#0E0E12]/20 rounded-xl max-w-xs text-xs text-slate-400 font-mono animate-pulse">
+        <div className="w-3.5 h-3.5 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin mr-2"></div>
+        Decrypting attachment...
+      </div>
+    );
+  }
+
+  if (error || !fileData) {
+    return (
+      <div className="flex items-center p-3 border border-red-500/20 bg-red-500/5 text-red-400 rounded-xl max-w-xs text-xs font-semibold">
+        <AlertCircle className="w-4 h-4 mr-2" />
+        Failed to decrypt file
+      </div>
+    );
+  }
+
+  const dataUrl = `data:${file.type};base64,${fileData}`;
+
+  if (file.type.startsWith("image/")) {
+    return (
+      <div id="image-thumbnail-wrapper" className="relative group/img rounded-xl overflow-hidden border border-white/10 aspect-video max-w-xs bg-slate-950 flex items-center justify-center">
+        <img
+          id="thumbnail-img"
+          src={dataUrl}
+          alt={file.name}
+          className="max-w-full max-h-[160px] object-cover cursor-zoom-in group-hover/img:scale-105 transition duration-300"
+          onClick={() => onSetLightbox(dataUrl, file.name)}
+        />
+        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+          <span className="bg-[#0E0E12]/90 border border-white/5 text-white px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider">
+            View Frame
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      id="document-preview-card"
+      className={`flex items-center gap-3 p-3 rounded-xl border ${
+        isMe
+          ? "bg-[#0E0E12]/40 border-white/5"
+          : "bg-[#0E0E12]/20 border-white/5"
+      }`}
+    >
+      <div className="p-2.5 rounded-lg bg-white/5">
+        {getFileIcon(file.type)}
+      </div>
+      <div className="text-left flex-1 min-w-0">
+        <h5 className="font-bold text-xs truncate max-w-[150px] text-white">
+          {file.name}
+        </h5>
+        <p className="text-[10px] opacity-75 text-slate-400 font-semibold font-mono">
+          {formatBytes(file.size)}
+        </p>
+      </div>
+      <a
+        id={`download-${file.id}`}
+        href={dataUrl}
+        download={file.name}
+        className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-all shadow-sm flex items-center justify-center cursor-pointer"
+        title="Download attachment"
+      >
+        <Download className="w-3.5 h-3.5" />
+      </a>
+    </div>
+  );
+}
 
 interface ChatRoomProps {
   roomId: string;
@@ -36,6 +160,7 @@ interface ChatRoomProps {
   peerTyping: boolean;
   onSendMessage: (text: string, fileId?: string, fileMeta?: any) => void;
   onDeleteMessage: (messageId: string) => void;
+  onSetTyping?: (isTyping: boolean) => void;
   onLeaveRoom: () => void;
   isDarkMode: boolean;
 }
@@ -51,6 +176,7 @@ export default function ChatRoom({
   peerTyping,
   onSendMessage,
   onDeleteMessage,
+  onSetTyping,
   onLeaveRoom,
   isDarkMode,
 }: ChatRoomProps) {
@@ -95,22 +221,14 @@ export default function ChatRoom({
     // Send typing notification if not already typing
     if (!isSelfTyping) {
       setIsSelfTyping(true);
-      window.dispatchEvent(
-        new CustomEvent("ws-send", {
-          detail: { type: "typing", roomId, isTyping: true },
-        })
-      );
+      onSetTyping?.(true);
     }
 
     // Reset typing timer
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
       setIsSelfTyping(false);
-      window.dispatchEvent(
-        new CustomEvent("ws-send", {
-          detail: { type: "typing", roomId, isTyping: false },
-        })
-      );
+      onSetTyping?.(false);
     }, 2000);
   };
 
@@ -118,11 +236,7 @@ export default function ChatRoom({
   const cleanupSelfTyping = () => {
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     setIsSelfTyping(false);
-    window.dispatchEvent(
-      new CustomEvent("ws-send", {
-        detail: { type: "typing", roomId, isTyping: false },
-      })
-    );
+    onSetTyping?.(false);
   };
 
   // Handle Drag & Drop triggers
@@ -200,30 +314,19 @@ export default function ChatRoom({
 
     try {
       if (attachments.length > 0) {
-        // Upload each attachment and dispatch messaging event
+        // Upload each attachment directly to Firebase and dispatch messaging event
         for (const attachment of attachments) {
-          const response = await fetch(getApiUrl("/api/upload"), {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              sessionId,
-              roomId,
-              name: attachment.file.name,
-              type: attachment.file.type,
-              size: attachment.file.size,
-              data: attachment.base64Data,
-            }),
+          const fileId = Math.random().toString(36).substring(2, 15);
+          await set(dbRef(db, `files/${fileId}`), {
+            id: fileId,
+            name: attachment.file.name,
+            type: attachment.file.type,
+            size: attachment.file.size,
+            data: attachment.base64Data,
           });
 
-          const result = await response.json();
-          if (!result.success) {
-            throw new Error(result.error || "File upload failed");
-          }
-
           // Send message with file metadata attached
-          onSendMessage("", result.fileId, {
+          onSendMessage("", fileId, {
             name: attachment.file.name,
             type: attachment.file.type,
             size: attachment.file.size,
@@ -259,16 +362,7 @@ export default function ChatRoom({
     setInputText((prev) => prev + emoji);
   };
 
-  // Determine appropriate icon for attachments
-  const getFileIcon = (mimeType: string) => {
-    if (mimeType.startsWith("image/")) return <Image className="w-5 h-5 text-indigo-400" />;
-    if (mimeType.startsWith("audio/")) return <Volume2 className="w-5 h-5 text-cyan-400" />;
-    if (mimeType.startsWith("video/")) return <Video className="w-5 h-5 text-amber-400" />;
-    if (mimeType.includes("pdf") || mimeType.includes("word") || mimeType.includes("document")) {
-      return <FileText className="w-5 h-5 text-emerald-400" />;
-    }
-    return <File className="w-5 h-5 text-slate-400" />;
-  };
+  // getFileIcon moved to file scope
 
   return (
     <div
@@ -422,61 +516,11 @@ export default function ChatRoom({
                     >
                       {/* File Rendering */}
                       {msg.file && (
-                        <div id="shared-file-view" className="space-y-2 select-none">
-                          {msg.file.type.startsWith("image/") ? (
-                            // Image share thumbnail
-                            <div id="image-thumbnail-wrapper" className="relative group/img rounded-xl overflow-hidden border border-white/10 aspect-video max-w-xs bg-slate-950 flex items-center justify-center">
-                              <img
-                                id="thumbnail-img"
-                                src={getApiUrl(`/api/file/${msg.file.id}?sessionId=${sessionId}`)}
-                                alt={msg.file.name}
-                                className="max-w-full max-h-[160px] object-cover cursor-zoom-in group-hover/img:scale-105 transition duration-300"
-                                onClick={() =>
-                                  setLightboxImage({
-                                    url: getApiUrl(`/api/file/${msg.file.id}?sessionId=${sessionId}`),
-                                    name: msg.file!.name,
-                                  })
-                                }
-                              />
-                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
-                                <span className="bg-[#0E0E12]/90 border border-white/5 text-white px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider">
-                                  View Frame
-                                </span>
-                              </div>
-                            </div>
-                          ) : (
-                            // Document file preview card
-                            <div
-                              id="document-preview-card"
-                              className={`flex items-center gap-3 p-3 rounded-xl border ${
-                                isMe
-                                  ? "bg-[#0E0E12]/40 border-white/5"
-                                  : "bg-[#0E0E12]/20 border-white/5"
-                              }`}
-                            >
-                              <div className="p-2.5 rounded-lg bg-white/5">
-                                {getFileIcon(msg.file.type)}
-                              </div>
-                              <div className="text-left flex-1 min-w-0">
-                                <h5 className="font-bold text-xs truncate max-w-[150px] text-white">
-                                  {msg.file.name}
-                                </h5>
-                                <p className="text-[10px] opacity-75 text-slate-400 font-semibold font-mono">
-                                  {formatBytes(msg.file.size)}
-                                </p>
-                              </div>
-                              <a
-                                id={`download-${msg.file.id}`}
-                                href={getApiUrl(`/api/file/${msg.file.id}?sessionId=${sessionId}`)}
-                                download={msg.file.name}
-                                className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-all shadow-sm flex items-center justify-center cursor-pointer"
-                                title="Download attachment"
-                              >
-                                <Download className="w-3.5 h-3.5" />
-                              </a>
-                            </div>
-                          )}
-                        </div>
+                        <FileAttachmentView
+                          file={msg.file}
+                          isMe={isMe}
+                          onSetLightbox={(url, name) => setLightboxImage({ url, name })}
+                        />
                       )}
 
                       {/* Text content rendering */}
