@@ -26,11 +26,15 @@ export default function QrScanner({ onScanSuccess, onCancel, isDarkMode }: QrSca
         scannerRef.current = html5Qrcode;
 
         await html5Qrcode.start(
-          { facingMode: "environment" },
+          { 
+            facingMode: "environment",
+            width: { min: 640, ideal: 1280, max: 1920 },
+            height: { min: 480, ideal: 720, max: 1080 }
+          },
           {
-            fps: 15,
+            fps: 20,
             qrbox: (width, height) => {
-              const size = Math.min(width, height) * 0.7;
+              const size = Math.min(width, height) * 0.85;
               return { width: size, height: size };
             },
           },
@@ -154,14 +158,15 @@ export default function QrScanner({ onScanSuccess, onCancel, isDarkMode }: QrSca
   };
 
   return (
-    <div id="qr-scanner-container" className="flex flex-col items-center w-full max-w-md mx-auto">
+    <div id="qr-scanner-container" className="flex flex-col items-center w-full max-w-lg mx-auto">
       {/* Glow card shell */}
       <div
         id="scanner-card"
-        className={`relative w-full rounded-3xl p-6 transition-all duration-300 shadow-2xl border ${isDarkMode
+        className={`relative w-full rounded-3xl p-6 transition-all duration-300 shadow-2xl border ${
+          isDarkMode
             ? "bg-sleek-card border-white/5 shadow-cyan-500/5"
             : "bg-white/90 border-slate-200/80 shadow-slate-200/50"
-          }`}
+        }`}
       >
         <div id="scanner-title" className="text-center mb-5">
           <h3 className={`text-lg font-black ${isDarkMode ? "text-white" : "text-slate-800"}`}>
