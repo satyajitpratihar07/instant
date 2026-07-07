@@ -126,8 +126,8 @@ function FileAttachmentView({ file, isMe, onSetLightbox }: FileAttachmentViewPro
     <div
       id="document-preview-card"
       className={`flex items-center gap-3 p-3 rounded-xl border ${isMe
-          ? "bg-[#0E0E12]/40 border-white/5"
-          : "bg-[#0E0E12]/20 border-white/5"
+        ? "bg-[#0E0E12]/40 border-white/5"
+        : "bg-[#0E0E12]/20 border-white/5"
         }`}
     >
       <div className="p-2.5 rounded-lg bg-white/5">
@@ -244,13 +244,6 @@ export default function ChatRoom({
       });
     };
   }, [showAddMember, sessionId]);
-
-  // Automatically close the Add Member modal when a peer joins the chat room
-  useEffect(() => {
-    if (peers.length > 0) {
-      setShowAddMember(false);
-    }
-  }, [peers.length]);
 
   const handleCopyCode = () => {
     if (!inviteCode) return;
@@ -476,8 +469,8 @@ export default function ChatRoom({
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       className={`flex h-[85vh] md:h-[82vh] relative w-full overflow-hidden rounded-none md:rounded-3xl border-0 md:border transition-all duration-300 shadow-2xl backdrop-blur-md ${isDarkMode
-          ? "bg-[#0E0E12]/80 border-white/5 shadow-cyan-500/5"
-          : "bg-white/80 border-slate-200/80 shadow-slate-200/40"
+        ? "bg-[#0E0E12]/80 border-white/5 shadow-cyan-500/5"
+        : "bg-white/80 border-slate-200/80 shadow-slate-200/40"
         }`}
     >
       {/* Drag & Drop File Sharing Overlay */}
@@ -516,9 +509,8 @@ export default function ChatRoom({
                   </button>
                   <button
                     onClick={() => onRespondJoinRequest && onRespondJoinRequest(req, false)}
-                    className={`px-2.5 py-1.5 text-[10px] uppercase tracking-wider font-bold rounded-lg transition-all cursor-pointer ${
-                      isDarkMode ? "bg-white/5 border border-white/10 hover:bg-white/10 text-white" : "bg-slate-100 hover:bg-slate-200 text-slate-700"
-                    }`}
+                    className={`px-2.5 py-1.5 text-[10px] uppercase tracking-wider font-bold rounded-lg transition-all cursor-pointer ${isDarkMode ? "bg-white/5 border border-white/10 hover:bg-white/10 text-white" : "bg-slate-100 hover:bg-slate-200 text-slate-700"
+                      }`}
                   >
                     Decline
                   </button>
@@ -669,12 +661,12 @@ export default function ChatRoom({
                     <div
                       id="bubble"
                       className={`rounded-2xl p-3.5 text-sm shadow-sm transition-all duration-150 text-left ${isMe
-                          ? isDarkMode
-                            ? "bg-gradient-to-tr from-cyan-500 to-indigo-600 text-white rounded-br-none shadow-cyan-500/5"
-                            : "bg-indigo-600 text-white rounded-br-none shadow-indigo-200"
-                          : isDarkMode
-                            ? "bg-white/5 text-slate-100 rounded-bl-none border border-white/5"
-                            : "bg-slate-100 text-slate-800 rounded-bl-none border border-slate-200/50"
+                        ? isDarkMode
+                          ? "bg-gradient-to-tr from-cyan-500 to-indigo-600 text-white rounded-br-none shadow-cyan-500/5"
+                          : "bg-indigo-600 text-white rounded-br-none shadow-indigo-200"
+                        : isDarkMode
+                          ? "bg-white/5 text-slate-100 rounded-bl-none border border-white/5"
+                          : "bg-slate-100 text-slate-800 rounded-bl-none border border-slate-200/50"
                         }`}
                     >
                       {/* File Rendering */}
@@ -756,8 +748,8 @@ export default function ChatRoom({
               <div
                 id="typing-bubble"
                 className={`rounded-2xl px-4 py-3 border rounded-bl-none flex items-center gap-1.5 ${isDarkMode
-                    ? "bg-white/5 border-white/5 text-slate-100"
-                    : "bg-slate-100 border-slate-200/50 text-slate-800"
+                  ? "bg-white/5 border-white/5 text-slate-100"
+                  : "bg-slate-100 border-slate-200/50 text-slate-800"
                   }`}
               >
                 <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-bounce [animation-delay:-0.3s]"></span>
@@ -809,8 +801,8 @@ export default function ChatRoom({
               type="button"
               onClick={triggerFileSelect}
               className={`w-16 h-16 rounded-xl border border-dashed flex flex-col items-center justify-center gap-1 cursor-pointer transition-all ${isDarkMode
-                  ? "border-white/10 hover:border-cyan-500 text-slate-400 hover:text-cyan-400 bg-white/5"
-                  : "border-slate-300 hover:border-indigo-600 text-slate-50 hover:text-indigo-600"
+                ? "border-white/10 hover:border-cyan-500 text-slate-400 hover:text-cyan-400 bg-white/5"
+                : "border-slate-300 hover:border-indigo-600 text-slate-50 hover:text-indigo-600"
                 }`}
             >
               <Paperclip className="w-4 h-4" />
@@ -870,10 +862,10 @@ export default function ChatRoom({
                 type="button"
                 onClick={() => setShowPlusMenu((prev) => !prev)}
                 className={`p-2.5 rounded-xl border cursor-pointer transition-all flex items-center justify-center ${showPlusMenu
-                    ? "border-cyan-500 text-cyan-400 bg-cyan-500/10"
-                    : isDarkMode
-                      ? "border-white/10 hover:border-cyan-500/30 hover:text-cyan-400 bg-white/5 text-slate-300"
-                      : "border-slate-200 hover:border-indigo-600 hover:text-indigo-600 bg-slate-50 text-slate-600"
+                  ? "border-cyan-500 text-cyan-400 bg-cyan-500/10"
+                  : isDarkMode
+                    ? "border-white/10 hover:border-cyan-500/30 hover:text-cyan-400 bg-white/5 text-slate-300"
+                    : "border-slate-200 hover:border-indigo-600 hover:text-indigo-600 bg-slate-50 text-slate-600"
                   }`}
                 title="More options"
               >
@@ -887,8 +879,8 @@ export default function ChatRoom({
                   <div
                     id="plus-menu-dropdown"
                     className={`absolute bottom-full left-0 mb-3 p-1.5 rounded-2xl shadow-xl border w-40 z-30 transition-all ${isDarkMode
-                        ? "bg-[#16161A] border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.5)]"
-                        : "bg-white border-slate-200 shadow-slate-200/50"
+                      ? "bg-[#16161A] border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.5)]"
+                      : "bg-white border-slate-200 shadow-slate-200/50"
                       }`}
                   >
                     <button
@@ -899,8 +891,8 @@ export default function ChatRoom({
                         triggerFileSelect();
                       }}
                       className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-all text-left ${isDarkMode
-                          ? "hover:bg-white/5 text-slate-200 hover:text-cyan-400"
-                          : "hover:bg-slate-100 text-slate-700 hover:text-indigo-600"
+                        ? "hover:bg-white/5 text-slate-200 hover:text-cyan-400"
+                        : "hover:bg-slate-100 text-slate-700 hover:text-indigo-600"
                         }`}
                     >
                       <Paperclip className="w-4 h-4 text-cyan-400" />
@@ -915,8 +907,8 @@ export default function ChatRoom({
                         setShowEmojiPicker(true);
                       }}
                       className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-all text-left ${isDarkMode
-                          ? "hover:bg-white/5 text-slate-200 hover:text-cyan-400"
-                          : "hover:bg-slate-100 text-slate-700 hover:text-indigo-600"
+                        ? "hover:bg-white/5 text-slate-200 hover:text-cyan-400"
+                        : "hover:bg-slate-100 text-slate-700 hover:text-indigo-600"
                         }`}
                     >
                       <Smile className="w-4 h-4 text-amber-400" />
@@ -936,8 +928,8 @@ export default function ChatRoom({
               onChange={handleInputChange}
               disabled={isUploading}
               className={`flex-1 min-w-0 py-2.5 md:py-3 px-3 md:px-4 rounded-xl outline-none border transition-all text-xs md:text-sm ${isDarkMode
-                  ? "bg-slate-950/80 border-white/5 text-slate-100 placeholder-slate-600 focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/30"
-                  : "bg-slate-50 border-slate-200 text-slate-800 placeholder-slate-400 focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600"
+                ? "bg-slate-950/80 border-white/5 text-slate-100 placeholder-slate-600 focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/30"
+                : "bg-slate-50 border-slate-200 text-slate-800 placeholder-slate-400 focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600"
                 }`}
             />
 
@@ -1087,9 +1079,8 @@ export default function ChatRoom({
                 simple={false}
               />
             ) : (
-              <div className={`flex items-center justify-center p-8 rounded-3xl min-h-[300px] border ${
-                isDarkMode ? "bg-[#16161A] border-white/5" : "bg-white border-slate-200"
-              }`}>
+              <div className={`flex items-center justify-center p-8 rounded-3xl min-h-[300px] border ${isDarkMode ? "bg-[#16161A] border-white/5" : "bg-white border-slate-200"
+                }`}>
                 <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
               </div>
             )}
@@ -1103,8 +1094,8 @@ export default function ChatRoom({
           <div className="relative w-full max-w-sm animate-scale-up">
             <div
               className={`relative w-full rounded-3xl p-6 transition-all duration-300 shadow-2xl border ${isDarkMode
-                  ? "bg-sleek-card border-white/5 shadow-cyan-500/5 text-white"
-                  : "bg-white border-slate-200 shadow-slate-200/50 text-slate-800"
+                ? "bg-sleek-card border-white/5 shadow-cyan-500/5 text-white"
+                : "bg-white border-slate-200 shadow-slate-200/50 text-slate-800"
                 }`}
             >
               <button
@@ -1140,8 +1131,8 @@ export default function ChatRoom({
                   }}
                   disabled={joining}
                   className={`w-full py-3 px-4 rounded-xl text-center text-xl font-bold font-mono tracking-widest outline-none border transition-all ${isDarkMode
-                      ? "bg-slate-950/80 border-white/10 text-slate-100 placeholder-slate-800 focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/30"
-                      : "bg-slate-50 border-slate-200 text-slate-800 placeholder-slate-400 focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600"
+                    ? "bg-slate-950/80 border-white/10 text-slate-100 placeholder-slate-800 focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/30"
+                    : "bg-slate-50 border-slate-200 text-slate-800 placeholder-slate-400 focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600"
                     }`}
                 />
 
@@ -1149,8 +1140,8 @@ export default function ChatRoom({
                   type="submit"
                   disabled={joining || !joinCodeInput.trim()}
                   className={`w-full py-3 px-4 rounded-xl font-bold transition-all duration-200 cursor-pointer text-xs uppercase tracking-wider flex items-center justify-center gap-2 ${isDarkMode
-                      ? "bg-gradient-to-tr from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white shadow-lg shadow-cyan-500/15"
-                      : "bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/15"
+                    ? "bg-gradient-to-tr from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white shadow-lg shadow-cyan-500/15"
+                    : "bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/15"
                     }`}
                 >
                   {joining ? (

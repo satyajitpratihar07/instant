@@ -60,6 +60,7 @@ export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
   const [waitingForGroupApprove, setWaitingForGroupApprove] = useState<string | null>(null);
+  const [roomMemberName, setRoomMemberName] = useState<string>("");
   const [incomingRequest, setIncomingRequest] = useState<{
     id: string;
     name: string;
@@ -72,6 +73,7 @@ export default function App() {
 
   // --- Connection Refs ---
   const autoConnectRef = useRef<string | null>(null);
+  const isHostRef = useRef<boolean>(false);
 
   // --- Custom Toast Dispatcher ---
   const addToast = (message: string, type: "success" | "error" | "info" = "info") => {
@@ -98,6 +100,53 @@ export default function App() {
 
     return () => clearInterval(interval);
   }, [session?.id]);
+
+  // --- Instant cleanup on refresh/unload/close page via keepalive fetch ---
+  useEffect(() => {
+    if (!session?.id) return;
+
+    const handleUnload = () => {
+      const dbUrl = "https://instant-f2b0b-default-rtdb.asia-southeast1.firebasedatabase.app";
+      
+      // 1. Delete user session node instantly
+      fetch(`${dbUrl}/sessions/${session.id}.json`, {
+        method: "DELETE",
+        keepalive: true
+      });
+
+      if (session.connectedRoomId) {
+        const roomId = session.connectedRoomId;
+
+        // 2. Remove member node instantly
+        fetch(`${dbUrl}/rooms/${roomId}/members/${session.id}.json`, {
+          method: "DELETE",
+          keepalive: true
+        });
+
+        // 3. Remove typing node instantly
+        fetch(`${dbUrl}/rooms/${roomId}/typing/${session.id}.json`, {
+          method: "DELETE",
+          keepalive: true
+        });
+
+        // 4. If current user is host, delete the entire room instantly
+        if (isHostRef.current) {
+          fetch(`${dbUrl}/rooms/${roomId}.json`, {
+            method: "DELETE",
+            keepalive: true
+          });
+        }
+      }
+    };
+
+    window.addEventListener("beforeunload", handleUnload);
+    window.addEventListener("pagehide", handleUnload); // for safari/mobile compatibility
+    
+    return () => {
+      window.removeEventListener("beforeunload", handleUnload);
+      window.removeEventListener("pagehide", handleUnload);
+    };
+  }, [session?.id, session?.connectedRoomId]);
 
   // --- Real-time Session listener (incoming requests & pairing status) ---
   useEffect(() => {
@@ -228,7 +277,7 @@ export default function App() {
         const msgList: Message[] = Object.entries(roomData.messages).map(([id, val]: [string, any]) => ({
           id,
           senderId: val.senderId,
-          senderName: val.senderId === session.id ? session.name : (membersMap[val.senderId]?.name || val.senderName || "Member"),
+          senderName: val.senderId === session.id ? (membersMap[session.id]?.name || val.senderName || session.name) : (membersMap[val.senderId]?.name || val.senderName || "Member"),
           text: val.text,
           timestamp: val.timestamp,
           file: val.file || undefined
@@ -267,8 +316,14 @@ export default function App() {
       onDisconnect(myMemberRef).remove();
       onDisconnect(myTypingRef).remove();
 
+      // Sync my name in this room
+      const myMemberName = membersMap[session.id]?.name || session.name;
+      setRoomMemberName(myMemberName);
+
       // If the current user is the host/creator, delete the entire room on disconnect to end session for all users
       const isHost = roomData.creatorId === session.id || (!roomData.creatorId && Object.keys(membersMap)[0] === session.id);
+      isHostRef.current = isHost;
+
       if (isHost) {
         onDisconnect(roomNodeRef).remove();
       } else {
@@ -387,7 +442,6 @@ export default function App() {
     try {
       await set(ref(db, `rooms/${newRoomId}`), {
         id: newRoomId,
-        creatorId: session.id, // Store host session ID
         createdTime: Date.now(),
         members: {
           [session.id]: {
@@ -557,10 +611,16 @@ export default function App() {
       await remove(ref(db, `rooms/${roomId}/joinRequests/${senderId}`));
 
       if (accept) {
+        // Fetch current members to determine the next User index
+        const roomSnap = await get(ref(db, `rooms/${roomId}/members`));
+        const members = roomSnap.exists() ? roomSnap.val() : {};
+        const index = Object.keys(members).length + 1;
+        const assignedName = `User ${index}`;
+
         // 2. Add to members list of the room
         await set(ref(db, `rooms/${roomId}/members/${senderId}`), {
           id: senderId,
-          name: requester.name,
+          name: assignedName,
           avatarSeed: requester.avatarSeed,
           joinedAt: Date.now(),
           lastActive: Date.now()
@@ -648,7 +708,7 @@ export default function App() {
       await set(newMsgRef, {
         id: newMsgRef.key,
         senderId: session.id,
-        senderName: session.name, // Save sender name directly inside the message
+        senderName: roomMemberName || session.name, // Save sender name directly inside the message
         text,
         timestamp: Date.now(),
         file: fileId ? { id: fileId, ...fileMeta } : null
@@ -743,8 +803,8 @@ export default function App() {
         <header
           id="global-nav-bar"
           className={`flex items-center justify-between py-4 px-6 my-4 rounded-2xl border select-none transition-colors duration-300 ${isDarkMode
-              ? "bg-sleek-card border-white/5 shadow-lg shadow-black/35"
-              : "bg-white border-slate-200/80 shadow-md"
+            ? "bg-sleek-card border-white/5 shadow-lg shadow-black/35"
+            : "bg-white border-slate-200/80 shadow-md"
             }`}
         >
           <div id="brand-logo" className="flex items-center gap-3">
@@ -777,8 +837,8 @@ export default function App() {
               id="theme-toggle-btn"
               onClick={handleToggleTheme}
               className={`p-2.5 rounded-xl border cursor-pointer transition-all ${isDarkMode
-                  ? "border-white/10 hover:border-cyan-500/50 text-amber-400 bg-white/5"
-                  : "border-slate-200 hover:border-indigo-600 text-indigo-600 bg-white"
+                ? "border-white/10 hover:border-cyan-500/50 text-amber-400 bg-white/5"
+                : "border-slate-200 hover:border-indigo-600 text-indigo-600 bg-white"
                 }`}
               title={isDarkMode ? "Switch to Light Theme" : "Switch to Dark Theme"}
             >
@@ -827,8 +887,8 @@ export default function App() {
                   id="btn-scan-flow"
                   onClick={() => setView("scan")}
                   className={`flex flex-col items-center gap-4 p-6 rounded-3xl border transition-all duration-300 cursor-pointer hover:scale-[1.02] group ${isDarkMode
-                      ? "bg-white/5 border-white/5 hover:border-cyan-500/30 hover:bg-white/10 text-white"
-                      : "bg-white border-slate-200 hover:border-indigo-600 hover:bg-slate-50 text-slate-800"
+                    ? "bg-white/5 border-white/5 hover:border-cyan-500/30 hover:bg-white/10 text-white"
+                    : "bg-white border-slate-200 hover:border-indigo-600 hover:bg-slate-50 text-slate-800"
                     }`}
                 >
                   <div className="p-4 rounded-2xl bg-cyan-500/10 text-cyan-400">
@@ -860,7 +920,7 @@ export default function App() {
               <ChatRoom
                 roomId={session.connectedRoomId || ""}
                 sessionId={session.id}
-                sessionName={session.name}
+                sessionName={roomMemberName || session.name}
                 avatarSeed={session.avatarSeed}
                 peer={peer}
                 peers={peers}
@@ -886,8 +946,8 @@ export default function App() {
         <footer
           id="global-footer"
           className={`py-3 px-6 mt-auto rounded-xl border select-none transition-colors duration-300 flex flex-col sm:flex-row items-center justify-between gap-3 text-[10px] font-mono tracking-wider ${isDarkMode
-              ? "bg-[#0E0E12] border-white/5 text-slate-500"
-              : "bg-white border-slate-200/80 text-slate-600 shadow-sm"
+            ? "bg-[#0E0E12] border-white/5 text-slate-500"
+            : "bg-white border-slate-200/80 text-slate-600 shadow-sm"
             }`}
         >
           <div className="flex flex-wrap items-center gap-4 sm:gap-6">
@@ -989,12 +1049,12 @@ export default function App() {
             id={`toast-${toast.id}`}
             key={toast.id}
             className={`p-3.5 rounded-2xl shadow-xl flex items-center gap-3 border pointer-events-auto animate-slide-up text-xs font-semibold ${toast.type === "success"
-                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                : toast.type === "error"
-                  ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
-                  : isDarkMode
-                    ? "bg-slate-900 border-slate-800 text-slate-100"
-                    : "bg-white border-slate-200 text-slate-700"
+              ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+              : toast.type === "error"
+                ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                : isDarkMode
+                  ? "bg-slate-900 border-slate-800 text-slate-100"
+                  : "bg-white border-slate-200 text-slate-700"
               }`}
           >
             {toast.type === "success" ? (
