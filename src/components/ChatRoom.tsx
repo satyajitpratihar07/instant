@@ -482,10 +482,13 @@ export default function ChatRoom({
         </div>
       )}
 
-      {/* Floating Group Join Requests Panel */}
+      {/* Centered Group Join Requests Dialog Modal */}
       {joinRequests.length > 0 && (
-        <div id="floating-group-join-requests" className="absolute top-16 left-1/2 -translate-x-1/2 z-[60] w-full max-w-sm px-4">
-          <div className={`p-4 rounded-2xl border shadow-2xl flex flex-col gap-3 animate-scale-up backdrop-blur-md ${isDarkMode ? "bg-slate-900/95 border-cyan-500/35 text-white" : "bg-white/95 border-slate-200 text-slate-800"}`}>
+        <div id="floating-group-join-requests" className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+          <div className={`p-6 rounded-3xl border shadow-2xl flex flex-col gap-4 animate-scale-up backdrop-blur-md w-full max-w-sm ${isDarkMode ? "bg-slate-900/95 border-cyan-500/35 text-white" : "bg-white/95 border-slate-200 text-slate-800"}`}>
+            <h3 className="text-xs font-black tracking-wider uppercase text-cyan-400 text-center border-b border-white/5 pb-2">
+              Incoming Connection Requests
+            </h3>
             {joinRequests.map((req) => (
               <div key={req.id} className="flex items-center justify-between gap-3 py-1 border-b last:border-b-0 border-white/5">
                 <div className="flex items-center gap-2.5 min-w-0">
