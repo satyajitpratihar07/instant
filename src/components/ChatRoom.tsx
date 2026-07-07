@@ -686,7 +686,7 @@ export default function ChatRoom({
             </div>
           )}
 
-          <form id="chat-input-form" onSubmit={handleSendMessage} className="flex items-center gap-3">
+          <form id="chat-input-form" onSubmit={handleSendMessage} className="flex items-center gap-2 md:gap-3">
             {/* Attachment Actions */}
             <input
               id="hidden-file-input"
@@ -700,22 +700,22 @@ export default function ChatRoom({
               id="btn-attach"
               type="button"
               onClick={triggerFileSelect}
-              className={`p-2.5 rounded-xl border cursor-pointer transition-all ${
+              className={`p-2 md:p-2.5 rounded-xl border cursor-pointer transition-all ${
                 isDarkMode
                   ? "border-white/10 hover:border-cyan-500/30 hover:text-cyan-400 bg-white/5 text-slate-300"
                   : "border-slate-200 hover:border-indigo-600 hover:text-indigo-600 bg-slate-50 text-slate-600"
               }`}
               title="Attach File (Images, PDF, ZIP, etc)"
             >
-              <Paperclip className="w-5 h-5" />
+              <Paperclip className="w-4 h-4 md:w-5 md:h-5" />
             </button>
 
-            {/* Emoji Trigger */}
+            {/* Emoji Trigger - Hidden on mobile as native emoji keyboards exist */}
             <button
               id="btn-emoji-toggle"
               type="button"
               onClick={() => setShowEmojiPicker((prev) => !prev)}
-              className={`p-2.5 rounded-xl border cursor-pointer transition-all ${
+              className={`hidden md:block p-2.5 rounded-xl border cursor-pointer transition-all ${
                 isDarkMode
                   ? "border-white/10 hover:border-cyan-500/30 hover:text-cyan-400 bg-white/5 text-slate-300"
                   : "border-slate-200 hover:border-indigo-600 hover:text-indigo-600 bg-slate-50 text-slate-600"
@@ -733,7 +733,7 @@ export default function ChatRoom({
               value={inputText}
               onChange={handleInputChange}
               disabled={isUploading}
-              className={`flex-1 py-3 px-4 rounded-xl outline-none border transition-all text-sm ${
+              className={`flex-1 min-w-0 py-2.5 md:py-3 px-3 md:px-4 rounded-xl outline-none border transition-all text-xs md:text-sm ${
                 isDarkMode
                   ? "bg-slate-950/80 border-white/5 text-slate-100 placeholder-slate-600 focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/30"
                   : "bg-slate-50 border-slate-200 text-slate-800 placeholder-slate-400 focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600"
@@ -745,9 +745,9 @@ export default function ChatRoom({
               id="btn-submit-message"
               type="submit"
               disabled={isUploading || (!inputText.trim() && attachments.length === 0)}
-              className="p-3 rounded-xl bg-gradient-to-tr from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 disabled:opacity-40 text-white transition-all cursor-pointer flex items-center justify-center shrink-0 shadow-lg shadow-cyan-500/15"
+              className="p-2.5 md:p-3 rounded-xl bg-gradient-to-tr from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 disabled:opacity-40 text-white transition-all cursor-pointer flex items-center justify-center shrink-0 shadow-lg shadow-cyan-500/15"
             >
-              <Send className="w-5 h-5" />
+              <Send className="w-4 h-4 md:w-5 md:h-5" />
             </button>
           </form>
         </footer>
