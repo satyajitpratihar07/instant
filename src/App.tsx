@@ -106,6 +106,9 @@ export default function App() {
     if (!session?.id) return;
 
     const handleUnload = () => {
+      // Clear localStorage session to ensure complete logout on page refresh
+      localStorage.removeItem("qr_p2p_session_id");
+
       const dbUrl = "https://instant-f2b0b-default-rtdb.asia-southeast1.firebasedatabase.app";
       
       // 1. Delete user session node instantly
