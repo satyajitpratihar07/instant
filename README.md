@@ -1,7 +1,7 @@
 <div align="center">
 
-# ⚡ InstantP2P
-### 🚀 Serverless Real-Time Chat & File Sharing
+⚡ InstantE2E
+🚀 Serverless Real-Time Chat & File Sharing
 
 <p align="center">
   <strong>Scan • Connect • Chat • Share</strong><br>
@@ -20,23 +20,23 @@
   <img src="https://img.shields.io/github/stars/satyajitpratihar07/instant?style=for-the-badge">
 </p>
 ---
-### 🌐 Live Website
-### **https://instant07.vercel.app**
+🌐 Live Website
+👉 https://instant07.vercel.app
 </div>
 
 ---
 
-# ✨ Overview
+✨ Overview
 
-**InstantP2P** is a premium real-time communication platform that enables users to connect instantly **without creating an account**.
+InstantE2E is a premium real-time communication platform that enables users to connect instantly **without creating an account.
 
 Simply generate a QR code or share a **6-digit invite code**, let another user scan or enter it, approve the request, and start chatting immediately.
 
 Designed with a **glassmorphism UI**, responsive mobile experience, real-time synchronization, and zero-setup pairing, InstantP2P delivers an effortless communication experience.
 ---
-# 🎯 Key Features
+🎯 Key Features
 
-## ⚡ Instant Connection
+⚡ Instant Connection
 
 - 📱 Dynamic QR Code pairing
 - 🔢 6-Digit Invite Code
@@ -46,7 +46,7 @@ Designed with a **glassmorphism UI**, responsive mobile experience, real-time sy
 
 ---
 
-## 💬 Real-Time Chat
+💬 Real-Time Chat
 
 - 💬 Instant Messaging
 - ✍️ Live Typing Indicator
@@ -57,7 +57,7 @@ Designed with a **glassmorphism UI**, responsive mobile experience, real-time sy
 
 ---
 
-## 📂 File Sharing
+📂 File Sharing
 
 - 📎 Upload files up to **15 MB**
 - 🖼 Image Preview
@@ -67,7 +67,7 @@ Designed with a **glassmorphism UI**, responsive mobile experience, real-time sy
 
 ---
 
-## 👥 Multi Peer Support
+👥 Multi Peer Support
 
 - 👤 One-to-One Chat
 - 👥 Group Rooms
@@ -76,7 +76,7 @@ Designed with a **glassmorphism UI**, responsive mobile experience, real-time sy
 
 ---
 
-## 📱 Premium Mobile Experience
+📱 Premium Mobile Experience
 
 - 📲 Responsive Layout
 - ⌨ Keyboard Adaptive Interface
@@ -86,7 +86,7 @@ Designed with a **glassmorphism UI**, responsive mobile experience, real-time sy
 
 ---
 
-## 🔒 Privacy First
+🔒 Privacy First
 
 - ❌ No User Account
 - ❌ No Permanent Storage
@@ -96,7 +96,7 @@ Designed with a **glassmorphism UI**, responsive mobile experience, real-time sy
 
 ---
 
-# 🎨 Modern UI
+🎨 Modern UI
 
 ✔ Glassmorphism Cards
 
@@ -120,7 +120,7 @@ Designed with a **glassmorphism UI**, responsive mobile experience, real-time sy
 
 ---
 
-# 🛠 Tech Stack
+🛠 Tech Stack
 
 | Technology | Usage |
 |------------|-------|
@@ -134,9 +134,9 @@ Designed with a **glassmorphism UI**, responsive mobile experience, real-time sy
 | 🎯 Lucide React | Icons |
 
 
-# 🚀 Getting Started
+🚀 Getting Started
 
-## 1️⃣ Clone Repository
+1️⃣ Clone Repository
 
 ```bash
 git clone https://github.com/satyajitpratihar07/instant.git
@@ -148,7 +148,7 @@ cd instant
 
 ---
 
-## 2️⃣ Install Dependencies
+2️⃣ Install Dependencies
 
 ```bash
 npm install
@@ -156,7 +156,7 @@ npm install
 
 ---
 
-## 3️⃣ Firebase Configuration
+3️⃣ Firebase Configuration
 
 Open
 
@@ -174,7 +174,7 @@ src/App.tsx
 
 ---
 
-## 4️⃣ Start Development Server
+4️⃣ Start Development Server
 
 ```bash
 npm run dev
@@ -188,7 +188,7 @@ http://localhost:5173
 
 ---
 
-# 🌍 Deploy on Vercel
+🌍 Deploy on Vercel
 
 Install Vercel
 
@@ -204,7 +204,7 @@ vercel --prod
 
 ---
 
-# 🔥 Application Flow
+🔥 Application Flow
 
 ```text
 Generate QR
@@ -229,8 +229,7 @@ Share Files & Images
 ```
 
 ---
-
-# 🚀 Why InstantP2P?
+🚀 Why InstantP2P?
 
 ✅ No Login
 
@@ -262,7 +261,7 @@ Share Files & Images
 
 ---
 
-# 📸 Screenshots
+📸 Screenshots
 
 > Add your application screenshots here.
 
@@ -281,8 +280,7 @@ Share Files & Images
 ```
 
 ---
-
-# 🤝 Contributing
+🤝 Contributing
 
 Contributions are welcome!
 
@@ -308,7 +306,7 @@ Open Pull Request
 
 ---
 
-# 📜 License
+📜 License
 
 This project is licensed under the **MIT License**.
 
@@ -318,8 +316,8 @@ See the **LICENSE** file for more details.
 
 <div align="center">
 
-## ⭐ If you like this project, don't forget to give it a Star ⭐
+⭐ If you like this project, don't forget to give it a Star ⭐
 
-Made with ❤️ by **Satyajit Pratihar**
+Made with ❤️ by Satyajit Pratihar 
 
 </div>
