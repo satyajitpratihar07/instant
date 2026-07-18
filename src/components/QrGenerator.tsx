@@ -4,41 +4,11 @@ import QRCode from "qrcode";
 import { Copy, Check, RefreshCw, Smartphone, QrCode } from "lucide-react";
 import { getAvatarGradient, getInitials } from "../utils";
 
-interface QrGeneratorProps {
-  sessionId: string;
-  sessionName?: string;
-  avatarSeed?: string;
-  onRefresh?: () => void;
-  isDarkMode: boolean;
-  simple?: boolean;
-}
-
-export default function QrGenerator({
-  sessionId,
-  sessionName = "",
-  avatarSeed = "",
-  onRefresh = () => { },
-  isDarkMode,
-  simple = false,
-}: QrGeneratorProps) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+interfvasElement | null>(null);
   const [copied, setCopied] = useState(false);
   const [codeCopied, setCodeCopied] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-
-  const handleCopyCode = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    navigator.clipboard.writeText(sessionId);
-    setCodeCopied(true);
-    setTimeout(() => setCodeCopied(false), 2000);
-  };
-
-  // Generate invite link based on current origin
-  const inviteLink = `${window.location.origin}?scan=${sessionId}`;
-
-  useEffect(() => {
-    if (canvasRef.current && sessionId) {
-      // Configure colors according to mode
+ mode
       const darkColor = isDarkMode ? "#1e1b4b" : "#312e81"; // deep indigo
       const lightColor = "#ffffff";
 
@@ -119,18 +89,7 @@ export default function QrGenerator({
             <h3 className={`text-sm md:text-base font-black truncate ${isDarkMode ? "text-white" : "text-slate-800"}`}>
               {sessionName}
             </h3>
-          </div>
-          <div id="connection-status" className="flex items-center gap-1 px-2 py-1 md:px-2.5 md:py-1.5 rounded-full text-[9px] md:text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex-shrink-0">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span>Awaiting...</span>
-          </div>
-        </div>
-
-        {/* QR Code Container */}
-        <div id="qr-canvas-wrapper" className={`w-full flex flex-col items-center justify-center p-1 md:p-2 bg-white rounded-2xl border ${isDarkMode ? "border-cyan-500/35 shadow-[0_0_30px_rgba(6,182,212,0.18)]" : "border-slate-100 shadow-inner"}`}>
-          <canvas id="qr-canvas-element" ref={canvasRef} className="w-36 h-36 sm:w-44 sm:h-44 md:w-56 md:h-56 object-contain rounded-md" />
-          {/^\d{6}$/.test(sessionId) ? (
-            <div className="mt-2.5 mb-1 flex flex-col items-center gap-0.5 w-full select-none">
+          </div>>
               <span className="text-[9px] text-slate-400 uppercase tracking-widest font-black">
                 6-Digit Invite Code
               </span>
@@ -206,20 +165,6 @@ export default function QrGenerator({
                   handleCopyLink();
                 }
               }}
-              className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl font-bold text-[10px] uppercase tracking-wider border transition-all cursor-pointer ${isDarkMode
-                ? "border-white/10 text-slate-300 bg-white/5 hover:bg-white/10 hover:text-white"
-                : "border-slate-200 text-slate-600 bg-slate-50 hover:bg-slate-100"
-                }`}
-            >
-              <Smartphone className="w-3.5 h-3.5" />
-              Share
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div id="pairing-instructions" className={`flex items-center gap-2 mt-3.5 max-w-sm text-center text-[11px] md:text-xs ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-        <QrCode className="w-4 h-4 text-indigo-500 flex-shrink-0" />
         <p>
           Ask another user to click <strong className="text-indigo-500 font-semibold">Scan QR</strong> on their device and point their camera here to link instantly.
         </p>
